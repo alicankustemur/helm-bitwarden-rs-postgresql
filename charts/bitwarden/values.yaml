@@ -18,9 +18,15 @@ bitwarden:
   # # See: https://github.com/dani-garcia/bitwarden_rs#disable-invitations
   # invitations_allowed: true
 
+  ## Controls if new users need to verify their email address upon registration
+  ## Note that setting this option to true prevents logins until the email address has been verified!
+  ## The welcome email will include a verification link, and login attempts will periodically
+  ## trigger another verification email to be sent.
+  signups_verify: true
+
   # # Email of the unique server administrator account
   # # See: https://github.com/dani-garcia/bitwarden_rs#configure-server-administrator
-  # server_admin_email: admin@example.com
+  server_admin_email: admin@example.com
 
   # # Websocket support for notifications
   # # See: https://github.com/dani-garcia/bitwarden_rs#enabling-websocket-notifications
@@ -31,7 +37,7 @@ bitwarden:
   # # See: https://github.com/dani-garcia/bitwarden_rs#enabling-u2f-authentication
   # # TODO: Not supported currently
   # # TODO: Automatically template this into the ingress configuration
-  # domain: https://bw.domain.tld
+  domain: https://pass.example.com
 
   # # Configuration of YubiKey OTP
   # # See: https://github.com/dani-garcia/bitwarden_rs#enabling-yubikey-otp-authentication
@@ -75,14 +81,19 @@ bitwarden:
   # NOTE: DATA_FOLDER cannot be set here, as it is derived from the storage.path below.
   # TODO: Support DATABASE_URL, ATTACHMENTS_FOLDER, ICON_CACHE_FOLDER
   # TODO: Support fail2ban?
-
+  database_url: postgresql://postgresql.default.svc/bitwarden?user=bitwarden&password=mypassword
+  
+  # This page allows a server administrator to view all the registered users and to delete them. It also allows inviting new users, even when registration is disabled.
+  # To enable the admin page, you need to set an authentication token. This token can be anything, but it's recommended to use a long, randomly generated string of characters, for example running openssl rand -base64 48. Keep this token secret, this is the password to access the admin area of your server!
+  # To set the token, use the ADMIN_TOKEN variable:  
+  # admin_token: 
 
 deployment:
   # Image used for the deployment
   # See: https://www.github.com/dani-garcia/bitwarden_rs
   image:
-    repository: bitwardenrs/server
-    tag: 1.16.1
+    repository: bitwardenrs/server-postgresql
+    tag: 1.16.3
     pullPolicy: IfNotPresent
   # Resources, etc, for the deployment pod
   resources: {}
@@ -96,12 +107,19 @@ securityContext:
   fsGroup: 1000
   runAsUser: 1000
 
-# Should not be changed
 service:
-  type: ClusterIP
-  port: 80
-  target_port: 8080
-
+  type: LoadBalancer
+  ports:
+    http:
+      port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    https:
+      port: 443
+      targetPort: http
+      protocol: TCP
+      name: https
 
 # Settings regarding persistent storage
 # TODO: Support DATABASE_URL + ATTACHMENTS_FOLDER + ICON_CACHE_FOLDER
@@ -114,50 +132,16 @@ storage:
   # The maximum size of the persisted data
   size: 100Mi
 
-
-# Settings regarding persistent backup storage
-backup:
-  # Whether backup is enabled or not
-  enabled: true
-  # Where to store the backup data
-  path: "/bw-backup"
-  # The maximum size of the persisted backup data
-  size: 100Mi
-
-  # Cron schedule for the backup job (currently at 3:00 every night)
-  schedule: "* 3 * * *"
-
-  # Name the backup backup.sqlite3[TIMESTAMP] instead of backup.sqlite3
-  timestamp: false
-  # Create a file containing the timestamp of the backup
-  timestamp_file: "/bw-backup/timestamp"
-
-  # Image used for backup run
-  # See: https://github.com/Skeen/bitwarden_rs_backup
-  image:
-    repository: skeen/bitwarden_rs_backup
-    tag: latest
-    pullPolicy: Always
-
-  # Resources, etc, for the backup pod(s)
-  resources: {}
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-
-
 # Ingress configuration
 ingress:
   enabled: true
   annotations:
-    kubernetes.io/ingress.class: nginx
-    kubernetes.io/tls-acme: "true"
-    kubernetes.io/ssl-redirect: "true"
+    kubernetes.io/ingress.allow-http: "false"
   paths:
-    - '/'
+    - '/*'
   hosts:
-    - bitwarden.domain.tld  # host
+    - pass.example.net 
   tls:
     - secretName: bitwarden-tls-secret
       hosts:
-        - bitwarden.domain.tld  # host
+        - pass.example.net
